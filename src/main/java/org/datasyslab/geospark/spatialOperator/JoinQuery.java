@@ -11,6 +11,7 @@ import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.Polygon;
 import com.vividsolutions.jts.index.strtree.STRtree;
 
+import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 
 import org.apache.spark.api.java.JavaSparkContext;
@@ -35,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.HashMap;
 
 import scala.Tuple2;
 
@@ -116,6 +118,35 @@ public class JoinQuery implements Serializable{
 		this.polygonRDD.SpatialPartition(objectRDD.grids);
 		this.sc=sc;
 	}
+
+    /**
+     * Authors: Team Starks
+     * Project Phase 2
+     * Spatial Join Query between a RectangleRDD and a PointRDD using index nested loop. The PointRDD should be indexed in advance.
+     * @param pointRDD Indexed PointRDD
+     * @param rectangleRDD RectangleRDD
+     * @return A PairRDD which follows the schema: Envelope, A list of points covered by this envelope
+     */
+
+     public static JavaPairRDD<Envelope, HashSet<Point>> SpatialJoinQueryUsingCartesianProduct(JavaSparkContext sc, PointRDD pointRDD, RectangleRDD rectangleRDD) {
+         List<Tuple2<Envelope, HashSet<Point>>> list = new ArrayList<Tuple2<Envelope, HashSet<Point>>>();
+         
+         for(Envelope envelope : rectangleRDD.rawRectangleRDD.collect()) {
+             PointRDD resultPointRDD = RangeQuery.SpatialRangeQuery(pointRDD, envelope, 0);
+             HashSet<Point> pointSet = new HashSet<Point>(resultPointRDD.rawPointRDD.collect()); 
+             if (pointSet.size() != 0) {
+                list.add(new Tuple2<Envelope, HashSet<Point>>(envelope, pointSet));           
+             }
+         }
+         JavaPairRDD<Envelope, HashSet<Point>> result = sc.parallelizePairs(list);
+         return result;
+     }
+
+     public static JavaPairRDD<Envelope, HashSet<Point>> SpatialJoinQueryUsingCartesianProduct(PointRDD pointRDD, RectangleRDD rectangleRDD) {
+         JavaSparkContext sc = new JavaSparkContext(SparkContext.getOrCreate());
+         return SpatialJoinQueryUsingCartesianProduct(sc,pointRDD,rectangleRDD);
+     }
+
 
     /**
      * Spatial Join Query between a RectangleRDD and a PointRDD using index nested loop. The PointRDD should be indexed in advance.
